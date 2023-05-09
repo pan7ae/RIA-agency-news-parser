@@ -8,7 +8,6 @@ import csv
 import re
 import schedule
 
-
 # Ссылка на страницу новостей
 URL = "https://ria.ru/services/politics/more.html"
 
@@ -60,10 +59,10 @@ class NewsParser:
         self.http_response = HttpResponse()
 
     def get_html_page(self,
-                       article_url: str,
-                       params: Dict[str, Any] = None,
-                       headers: Dict[str, Any] = None
-                       ) -> BeautifulSoup:
+                      article_url: str,
+                      params: Dict[str, Any] = None,
+                      headers: Dict[str, Any] = None
+                      ) -> BeautifulSoup:
         response = self.http_response.get_response(article_url, params, headers)
         soup = BeautifulSoup(response.text, "html.parser")
         return soup
@@ -101,15 +100,14 @@ class NewsParser:
                 result.append(article_info)
         return result
 
-    def run_main(self) -> List:
+    def run_for_the_day(self) -> List:
         now = datetime.datetime.now()
         yesterday = now - datetime.timedelta(days=1)
 
         # +07:00 - часовой пояс Томска
         date_str = yesterday.strftime("%Y-%m-%dT%H:%M:%S+07:00")
 
-        url = f"https://ria.ru/search/"  #?query=&tags=&dateFrom={date_str}&dateTo={date_str}&sort=relevance"
-        # response = requests.get(url)
+        url = f"https://ria.ru/search/"
 
         # параметры запроса
         params = {
@@ -127,9 +125,33 @@ class NewsParser:
         with open("results.json", "w", encoding="utf-8") as outfile:
             json.dump(result, outfile, indent=4, ensure_ascii=False)
 
+    def main(self):
+        yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+
+        # +07:00 - часовой пояс Томска
+        date_str = yesterday.strftime("%Y-%m-%dT%H:%M:%S+07:00")
+
+        url = f"https://ria.ru/search/"
+        params = {
+            "query": "",
+            "tags": "",
+            "dateFrom": date_str,
+            "dateTo": date_str,
+            "sort": 'relevance',
+        }
+
+        while True:
+            now = datetime.datetime.now()
+            print(f"Начало парсинга новостей: {now}")
+            news = self.return_info(url=url, params=params, headers=head)
+            print(f"Кол-во новостей: {len(news)}")
+            for i in news:
+                print(i["title"])
+            # time.sleep(86400)
+            time.sleep(1800)
+            print()
+
 
 if __name__ == "__main__":
     ria = NewsParser()
-    res = ria.run_main()
-    ria.save_to_json(res)
-    print(res)
+    ria.main()
