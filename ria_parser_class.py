@@ -4,12 +4,9 @@ import time
 import datetime
 from typing import List, Dict, Any
 import json
-import csv
 import re
-import schedule
 
-# Ссылка на страницу новостей
-URL = "https://ria.ru/services/politics/more.html"
+
 
 # Сегодняшний день
 today = str(datetime.date.today())
@@ -17,12 +14,8 @@ today = str(datetime.date.today())
 # Преобразуем сегодняшний день для выполнения запроса
 date = "".join(today.split("-"))
 
-par = {
-    "id": "1869469542",
-    "date": date
-}
-
-head = {
+# Headers для запроса
+HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9,ru;q=0.8,af;q=0.7"
 }
@@ -33,6 +26,9 @@ keywords = ["США", "Сочи"]
 
 class HttpResponse:
     def get_response(self, url, params=None, headers=None):
+        '''
+        Выполняем запрос по ссылке
+        '''
         response = requests.request(
             method="GET",
             url=url,
@@ -42,6 +38,9 @@ class HttpResponse:
         return self.check_response(response)
 
     def check_response(self, response: requests.Response):
+        '''
+        Проверка статуса запроса
+        '''
         if response.status_code == 200:
             return response
         else:
@@ -63,11 +62,17 @@ class NewsParser:
                       params: Dict[str, Any] = None,
                       headers: Dict[str, Any] = None
                       ) -> BeautifulSoup:
+        '''
+        Получение HTML кода страницы
+        '''
         response = self.http_response.get_response(article_url, params, headers)
         soup = BeautifulSoup(response.text, "html.parser")
         return soup
 
     def get_pages(self, soup: BeautifulSoup) -> List[str]:
+        '''
+        Возвращаем список страниц с новостями
+        '''
         pages = []
         links = soup.find_all("a", {"class": "list-item__title"})
         for href in links:
@@ -75,9 +80,14 @@ class NewsParser:
         return pages
 
     def extract_info(self, article_url: str) -> Dict[str, Any] | None:
-        soup = self.get_html_page(article_url, headers=head)
-
-        title = soup.find(["div", "h1"], attrs={"class": "article__title"}).text
+        '''
+        Извлечение необходимой информации с каждой новости
+        '''
+        soup = self.get_html_page(article_url, headers=HEADERS)
+        if soup.find(["div", "h1"], attrs={"class": "article__title"}):
+            title = soup.find(["div", "h1"], attrs={"class": "article__title"}).text
+        else:
+            return None
 
         summary = ' '.join([i.text for i in soup.findAll("div", class_="article__text")])
         first_sentence_pattern = r"^([^.]\D+[^.]+\.\s)"
@@ -90,36 +100,30 @@ class NewsParser:
             return None
 
     def return_info(self, url, params, headers):
-        soup = self.get_html_page(article_url=url, params=params, headers=headers)
+        '''
+        Возврат новостей в списке и в JSON файле
+        '''
+        soup = self.get_html_page(article_url=url, params=params, headers=HEADERS)
         pages = self.get_pages(soup)
 
+        # Открытие существующего JSON файла, иначе создание списка data
+        try:
+            with open("results.json", "r", encoding="utf-8") as outfile:
+                data = json.load(outfile)
+        except:
+            data = []
+
+        # На всякий случай создаем отдельный список, не связанный с data
         result = []
         for page in pages:
             article_info = self.extract_info(page)
-            if article_info:
+            if article_info and article_info not in result and article_info not in data:
+                data.append(article_info)
                 result.append(article_info)
+                with open("results.json", "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=4, ensure_ascii=False)
         return result
 
-    def run_for_the_day(self) -> List:
-        now = datetime.datetime.now()
-        yesterday = now - datetime.timedelta(days=1)
-
-        # +07:00 - часовой пояс Томска
-        date_str = yesterday.strftime("%Y-%m-%dT%H:%M:%S+07:00")
-
-        url = f"https://ria.ru/search/"
-
-        # параметры запроса
-        params = {
-            "query": "",
-            "tags": "",
-            "dateFrom": date_str,
-            "dateTo": date_str,
-            "sort": 'relevance',
-        }
-
-        articles = self.return_info(url, params=params, headers=head)
-        return articles
 
     def save_to_json(self, result: List[Dict[str, Any]]):
         with open("results.json", "w", encoding="utf-8") as outfile:
@@ -143,12 +147,12 @@ class NewsParser:
         while True:
             now = datetime.datetime.now()
             print(f"Начало парсинга новостей: {now}")
-            news = self.return_info(url=url, params=params, headers=head)
+            news = self.return_info(url=url, params=params, headers=HEADERS)
             print(f"Кол-во новостей: {len(news)}")
             for i in news:
                 print(i["title"])
-            # time.sleep(86400)
-            time.sleep(1800)
+            time.sleep(86400)  # Запуск на сутки
+            time.sleep(15)  # Запуск на более короткое время для проверки работы программы
             print()
 
 
